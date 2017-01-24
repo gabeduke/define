@@ -23,7 +23,7 @@ parsed_json = json.loads(json.dumps(r.json()))
 
 for r in parsed_json['results'][0]['lexicalEntries']:
     body = r['entries'][0]['senses'][0]['definitions'][0]
-    output += '\n' + (str)definition_key + '. ' + body
+    output += '\n' + str(definition_key) + '. ' + body
     definition_key += 1
 
 print(output)
