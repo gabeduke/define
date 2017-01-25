@@ -1,29 +1,131 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.5
 
-import requests
-import json
-import config_local
-import argparse
+import sys
+import urllib
+import re
+from bs4 import BeautifulSoup
 
-app_id = config_local.APP_ID
-app_key = config_local.APP_KEY
-definition_key = 1
+def define(args):
 
-parser = argparse.ArgumentParser(description='Example with long option names')
-parser.add_argument(action="store", dest="WORD_ID")
+    argument = str(args)
 
-language = 'en'
-word_id = vars(parser.parse_args())['WORD_ID']
-output = '::::Definitions::::\n'
+    argument = argument.replace(" ", "-")
 
-url = 'https://od-api.oxforddictionaries.com:443/api/v1/entries/' + language + '/' + word_id.lower() + '/definitions'
+    argument = re.sub(r'[^\w\s]','', argument)
 
-r = requests.get(url, headers={'app_id': app_id, 'app_key': app_key})
-parsed_json = json.loads(json.dumps(r.json()))
+    url = "http://www.dictionary.com/browse/" + argument + "?s=t"
 
-for r in parsed_json['results'][0]['lexicalEntries']:
-    body = r['entries'][0]['senses'][0]['definitions'][0]
-    output += '\n' + str(definition_key) + '. ' + body
-    definition_key += 1
+    try:
+        response = urllib.request.urlopen(url)
+        html = response.read()
 
-print(output)
+    except:
+        #404 caused by word not found
+        print("No defenition for " + argument.capitalize())
+        return
+
+    soup = BeautifulSoup(html, 'html.parser')
+
+    #word not found
+    suggestions = soup.findAll("span", { "class" : "head-entry" })
+    for suggestion in suggestions:
+        if "Did you mean" in suggestions.get_text():
+            print("No defenition for " + argument.capitalize())
+
+    #word not found
+    neverfound = soup.findAll("span")
+    for never in neverfound:
+        if "no results" in never.get_text():
+            print("No defenition for " + argument.capitalize())
+
+
+    nounlist = []
+    verblist = []
+    adjlist = []
+    divs = soup.findAll("div", { "class" : "def-list" })
+
+
+    for div in divs:
+
+        sections = div.findAll("section", { "class" : "def-pbk" })
+
+        for section in sections:
+
+            headers = section.findAll("header", { "class" : "luna-data-header" })
+
+            for header in headers:
+
+                #find nouns
+                if "noun" in header.get_text():
+
+                    nounlist.insert(0, header.get_text())
+
+
+                    contents = section.findAll("div", { "class" : "def-set" })
+
+                    i = 0
+
+                    for content in contents:
+                        t = content.get_text()
+                        i = i + 1
+                        if i < 3:
+                            cleaned = t.replace('\n', '')
+                            cleaned = re.sub("\s\s+", " ", cleaned)
+                            nounlist.append(cleaned)
+
+                #find verbs
+                if "verb" in header.get_text():
+
+                    verblist.append(header.get_text())
+
+                    contents = section.findAll("div", { "class" : "def-set" })
+
+                    i = 0
+
+                    for content in contents:
+                        t = content.get_text()
+                        i = i + 1
+                        if i < 3:
+                            cleaned = t.replace('\n', '')
+                            cleaned = re.sub("\s\s+", " ", cleaned)
+                            verblist.append(cleaned)
+
+                            #find adjectives
+                if "adjective" in header.get_text():
+
+                    verblist.append(header.get_text())
+
+                    contents = section.findAll("div", { "class" : "def-set" })
+
+                    i = 0
+
+                    for content in contents:
+                        t = content.get_text()
+                        i = i + 1
+                        if i < 3:
+                            cleaned = t.replace('\n', '')
+                            cleaned = re.sub("\s\s+", " ", cleaned)
+                            verblist.append(cleaned)
+
+    #prepare lists
+    nounlist = remove_duplicates(nounlist)
+    nounprint = "\n".join(nounlist)
+    verbprint = "\n".join(verblist)
+    adjprint = "\n".join(adjlist)
+
+
+    tosend = '"<b>' + argument.capitalize() + '</b>"' + "\n\n" + nounprint + "\n\n" + verbprint + "\n\n" + adjprint
+    tosend = re.sub(r'\n\n+', r'\n\n', tosend)
+
+    print(tosend + url)
+
+def remove_duplicates(values):
+    output = []
+    seen = set()
+    for value in values:
+        if value not in seen:
+            output.append(value)
+            seen.add(value)
+    return output
+
+define(sys.argv[1])
